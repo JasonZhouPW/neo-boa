@@ -27,11 +27,15 @@ attendeeKey = "Attendee"
 indexKey = "Index"
 winnerKey = "Winner"
 paidKey = "Paid"
+starttimeKey = "Starttime"
 status_running = "RUNNING"
 status_end = "END"
 #ong decimal
 ongPerTicket = 1000000000
 txFee = 10000000
+
+#after 600 seconds, the game can be ended manually
+timeOut = 600
 
 def Main(operation, args):
     if operation == 'attend':
@@ -51,6 +55,19 @@ def Main(operation, args):
     if operation == 'queryCurrentRound':
         count = args[0]
         return queryCurrentRound(count)
+    if operation == 'endGame':
+        count = args[0]
+        currentRound = Get(ctx, concatKey(roundKey, count))
+        if not currentRound:
+            return False
+        status = Get(ctx, concatKey(statusKey, concatKey(count, currentRound)))
+        if status == status_end:
+            return False
+        starttime = Get(ctx, concatKey(starttimeKey, concatKey(count, currentRound)))
+        if getTimestamp() - starttime > timeOut:
+            endGame(count)
+            return True
+        return False
 
     return False
 
@@ -200,6 +217,8 @@ def startNewRound(roundNum, count, acct):
     Put(ctx, concatKey(concatKey(indexKey, key), 1), acct)
     # record status
     Put(ctx, concatKey(statusKey, key), status_running)
+    # record starttime
+    Put(ctx, concatKey(starttimeKey, key), getTimestamp())
 
 
 
