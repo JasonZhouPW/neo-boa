@@ -32,7 +32,8 @@ status_running = "RUNNING"
 status_end = "END"
 #ong decimal
 ongPerTicket = 1000000000
-txFee = 10000000
+txFee = 16200000
+createFee = 3300000
 
 #after 600 seconds, the game can be ended manually
 timeOut = 600
@@ -56,7 +57,8 @@ def Main(operation, args):
         count = args[0]
         return queryCurrentRound(count)
     if operation == 'endGame':
-        count = args[0]
+        account = args[0]
+        count = args[1]
         currentRound = Get(ctx, concatKey(roundKey, count))
         if not currentRound:
             return False
@@ -65,8 +67,9 @@ def Main(operation, args):
             return False
         starttime = Get(ctx, concatKey(starttimeKey, concatKey(count, currentRound)))
         if getTimestamp() - starttime > timeOut:
-            endGame(count)
+            endGame(account, count)
             return True
+        Notify('not timeout yet')
         return False
 
     return False
@@ -109,7 +112,7 @@ def attend(acct, count):
                     return False
 
                 if newCount == count:
-                    return endGame(count)
+                    return endGame(acct, count)
                 else:
                     return True
             else:
@@ -137,7 +140,7 @@ def queryCurrentRound(count):
     return Get(ctx, concatKey(roundKey, count))
 
 
-def endGame(count):
+def endGame(account, count):
     """
     end a game round
     :param count:
@@ -154,22 +157,35 @@ def endGame(count):
         idx = currentTime % attendcount + 1
         attendee = Get(ctx, concatKey(concatKey(indexKey, newkey), idx))
 
-        if transONGFromContract(attendee, attendcount * ongPerTicket):
+        # winner will pay for the tx fee
+        if transONGFromContract(attendee, attendcount * ongPerTicket - txFee - createFee):
             # record the winner of this round
             Put(ctx, concatKey(winnerKey, newkey), attendee)
             # mark this round game end
             Put(ctx, concatKey(statusKey, newkey), status_end)
             # mark ong paid
             Put(ctx, concatKey(paidKey, newkey), 'YES')
-            return True
-        Notify('transfer ONG failed!')
-        return False
+        else:
+            Notify('transfer ONG failed!')
+            return False
+
+        # refund txFee to last attendee
+        if transONGFromContract(account, txFee):
+            # refund createFee to first attendee
+            firstAttendee = Get(ctx, concatKey(concatKey(indexKey, newkey), 1))
+            if transONGFromContract(firstAttendee, createFee):
+                return True
+            Notify('transfer create ONG failed!')
+            return False
+        else:
+            Notify('transfer tx ONG failed!')
+            return False
+
     else:
         return True
 
 
-
-def transONG(fromacct,toacct,amount):
+def transONG(fromacct, toacct, amount):
     """
      transfer ONG
      :param fromacct:
@@ -221,16 +237,15 @@ def startNewRound(roundNum, count, acct):
     Put(ctx, concatKey(starttimeKey, key), getTimestamp())
 
 
-
-def transONGFromContract(toacct,amount):
+def transONGFromContract(toacct, amount):
     """
      transfer ONG from contract
      :param toacct:
      :param amount:
      :return:
      """
-    # winner will pay for the txFee
-    param = makeState(selfAddr, toacct, amount - txFee)
+
+    param = makeState(selfAddr, toacct, amount)
     res = Invoke(1, contractAddress, 'transfer', [param])
     Notify(res)
 
@@ -247,7 +262,7 @@ def concatKey(str1,str2):
     return concat(concat(str1, '_'), str2)
 
 
-def makeState(fromacct,toacct,amount):
+def makeState(fromacct, toacct, amount):
     """
     make a tranfer state parameter
     currently due to the compiler problem,
