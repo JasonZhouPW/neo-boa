@@ -8,6 +8,7 @@ from boa.builtins import concat
 from boa.interop.Ontology.Native import *
 from boa.builtins import state
 
+
 ctx = GetContext()
 selfAddr = GetExecutingScriptHash()
 
@@ -161,7 +162,7 @@ def transferONT(fromacct,toacct,amount):
     :return:
     """
     if CheckWitness(fromacct):
-        param = makeState(fromacct, toacct, amount)
+        param = state(fromacct, toacct, amount)
         res = Invoke(1,contractAddress,'transfer',[param])
         Notify(res)
 
@@ -194,7 +195,7 @@ def done(acct,url):
         Notify('not owner')
         return False
     amount = Get(ctx, concat('Price_', url))
-    param = makeState(selfAddr, acct, amount)
+    param = state(selfAddr, acct, amount)
     res = Invoke(1, contractAddress, 'transfer', [param])
     if res and res == b'\x01':
         buyer = Get(ctx, concat('TP_',url))
@@ -209,5 +210,3 @@ def done(acct,url):
         Notify('transfer failed')
         return False
 
-def makeState(fromacct,toacct,amount):
-    return state(fromacct, toacct, amount)
